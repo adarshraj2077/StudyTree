@@ -155,29 +155,34 @@ const ChatbotUI = ({ notes, activeNoteId, setActiveNoteId, messages, setMessages
 
   React.useEffect(scrollToBottom, [messages]);
 
-  const handleSend = () => {
+  const handleSend = async () => {
     if (!inputValue.trim()) return;
 
-    const newMessages = [...messages, { role: 'user', text: inputValue }];
+    const userMessage = inputValue;
+    const newMessages = [...messages, { role: 'user', text: userMessage }];
     setMessages(newMessages);
     setInputValue('');
 
-    setTimeout(() => {
-      let botResponse = "";
-      if (activeNote) {
-        if (inputValue.toLowerCase().includes('summary')) {
-          botResponse = `Based on your research on "${activeNote.name}", the core architecture involves ${activeNote.summary}`;
-        } else if (inputValue.toLowerCase().includes('key') || inputValue.toLowerCase().includes('points')) {
-          botResponse = `From "${activeNote.name}", I've extracted these critical architectural points:\n- ${activeNote.keyPoints.join('\n- ')}`;
-        } else {
-          botResponse = `Reference document "${activeNote.name}" suggests that ${activeNote.extractedInfo} \n\nWould you like me to dive deeper into the implementation details?`;
-        }
-      } else {
-        botResponse = "I'm ready to assist with your CS coursework! Simply select a document (ML, DL, OS, or DBMS) from the library or upload a new research paper to get started.";
-      }
+    setMessages(prev => [...prev, { role: 'bot', text: '...' }]); // simple typing indicator
 
-      setMessages(prev => [...prev, { role: 'bot', text: botResponse }]);
-    }, 800);
+    try {
+      const response = await fetch('http://localhost:3001/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: userMessage })
+      });
+      const data = await response.json();
+      
+      setMessages(prev => {
+        const withoutTyping = prev.slice(0, -1);
+        return [...withoutTyping, { role: 'bot', text: data.answer || data.error || 'No response.' }];
+      });
+    } catch (err) {
+      setMessages(prev => {
+        const withoutTyping = prev.slice(0, -1);
+        return [...withoutTyping, { role: 'bot', text: 'Error connecting to RAG backend.' }];
+      });
+    }
   };
 
   return (
@@ -249,6 +254,7 @@ const ChatbotUI = ({ notes, activeNoteId, setActiveNoteId, messages, setMessages
 // Simplified Upload UI
 const UploadUI = ({ title, subtitle, icon, colorClass, onUploadSuccess }) => {
   const [fileSelected, setFileSelected] = useState(false);
+  const [fileObj, setFileObj] = useState(null);
   const [fileName, setFileName] = useState('');
   const [isUploading, setIsUploading] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -268,10 +274,11 @@ const UploadUI = ({ title, subtitle, icon, colorClass, onUploadSuccess }) => {
     if (file) {
       setIsUploading(true);
       setFileName(file.name);
+      setFileObj(file);
       setTimeout(() => {
         setFileSelected(true);
         setIsUploading(false);
-      }, 1200);
+      }, 500);
     }
   };
 
@@ -279,25 +286,42 @@ const UploadUI = ({ title, subtitle, icon, colorClass, onUploadSuccess }) => {
     fileInputRef.current.click();
   };
 
-  const handleProcess = () => {
+  const handleProcess = async () => {
     setIsAnalyzing(true);
     let currentStep = 0;
     const interval = setInterval(() => {
       currentStep++;
-      if (currentStep < steps.length) {
-        setAnalysisStep(currentStep);
-      } else {
-        clearInterval(interval);
+      if (currentStep < steps.length) setAnalysisStep(currentStep);
+    }, 800);
+    
+    try {
+      const formData = new FormData();
+      formData.append('document', fileObj);
+      
+      const response = await fetch('http://localhost:3001/api/ingest', {
+        method: 'POST',
+        body: formData
+      });
+      
+      const data = await response.json();
+      clearInterval(interval);
+      setAnalysisStep(steps.length - 1);
+      
+      setTimeout(() => {
         onUploadSuccess({
           id: Date.now(),
           name: fileName,
-          summary: "This research paper explores advanced neural architectures and their impact on data processing latency.",
-          keyPoints: ["Model pruning reduces size by 40%", "Attention mechanisms improve long-range dependencies", "Layer normalization stabilizes training"],
-          extractedInfo: "the researchers suggest that scaling the model beyond 10B parameters yields diminishing returns without specialized hardware.",
+          summary: `Successfully ingested ${data.chunksAdded} chunks.`,
+          keyPoints: ["Document processed via custom RAG backend", "Embeddings generated with LLaMA", "Ready for querying"],
+          extractedInfo: "Backend processed document correctly.",
           date: 'Just now'
         });
-      }
-    }, 800);
+      }, 500);
+    } catch (error) {
+      clearInterval(interval);
+      console.error('Upload failed', error);
+      setIsAnalyzing(false);
+    }
   };
 
   return (
