@@ -98,10 +98,6 @@ The app will be available at `http://localhost:5173` (frontend) with the API run
 
 ## 📌 Project Status
 
-Actively developed — core RAG pipeline and study-organization features are functional. Planned improvements include [add anything you're planning, e.g. multi-document cross-referencing, quiz generation, mobile support].
+Actively developed — core RAG pipeline and study-organization features are functional.
 
 ---
-
-## 📄 License
-
-[Add your preferred license, e.g. MIT]
