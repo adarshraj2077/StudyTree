@@ -1,0 +1,87 @@
+const fs = require('fs');
+const path = require('path');
+
+function createSamplePdf(outputPath) {
+  const content = `BT
+/F1 12 Tf
+72 750 Td (Raft is a consensus algorithm designed as an alternative to Paxos.) Tj
+0 -20 Td (It was created by Diego Ongaro and John Ousterhout at Stanford University in 2014.) Tj
+0 -20 Td (Raft achieves consensus via an elected leader.) Tj
+0 -20 Td (A server in Raft can be in one of three states: Leader, Follower, or Candidate.) Tj
+0 -20 Td (In normal operation, there is exactly one leader and all of the other servers are followers.) Tj
+0 -20 Td (Followers are passive: they issue no requests on their own but respond to incoming RPCs.) Tj
+0 -20 Td (The leader handles all client requests and coordinates log replication across the cluster.) Tj
+0 -20 Td (Raft divides time into terms of arbitrary length, numbered with consecutive integers.) Tj
+0 -20 Td (Each term begins with an election, in which one or more candidates attempt to become leader.) Tj
+0 -20 Td (If a candidate wins the election, it serves as leader for the rest of the term.) Tj
+0 -20 Td (Heartbeat messages are periodically sent by the leader to maintain its authority.) Tj
+0 -20 Td (If a follower receives no communication over an election timeout, it assumes there is no leader.) Tj
+0 -20 Td (The election timeout is randomized between 150ms and 300ms to prevent split votes.) Tj
+0 -20 Td (Log entries consist of a state machine command, term number, and an integer index.) Tj
+0 -20 Td (Once a log entry created by the leader has been replicated on a majority of servers, it is committed.) Tj
+ET`;
+
+  const streamLength = Buffer.byteLength(content, 'utf8');
+
+  const pdf = `%PDF-1.4
+1 0 obj
+<<
+  /Type /Catalog
+  /Pages 2 0 R
+>>
+endobj
+2 0 obj
+<<
+  /Type /Pages
+  /Kids [3 0 R]
+  /Count 1
+>>
+endobj
+3 0 obj
+<<
+  /Type /Page
+  /Parent 2 0 R
+  /MediaBox [0 0 612 792]
+  /Resources <<
+    /Font <<
+      /F1 <<
+        /Type /Font
+        /Subtype /Type1
+        /BaseFont /Helvetica
+      >>
+    >>
+  >>
+  /Contents 4 0 R
+>>
+endobj
+4 0 obj
+<<
+  /Length ${streamLength}
+>>
+stream
+${content}
+endstream
+endobj
+xref
+0 5
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000115 00000 n 
+0000000305 00000 n 
+trailer
+<<
+  /Size 5
+  /Root 1 0 R
+>>
+startxref
+${400 + streamLength}
+%%EOF`;
+
+  fs.mkdirSync(path.dirname(outputPath), { recursive: true });
+  fs.writeFileSync(outputPath, pdf, 'utf8');
+  console.log('Sample PDF created at:', outputPath);
+}
+
+const targetPath = path.resolve(__dirname, 'Raft_Consensus_Guide.pdf');
+createSamplePdf(targetPath);
