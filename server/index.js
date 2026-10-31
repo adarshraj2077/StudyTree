@@ -283,7 +283,7 @@ async function startServer() {
     await chatStore.init();
     await connectDB(); // Attempts Mongo connection with graceful fallback
 
-    app.listen(PORT, () => {
+    app.listen(PORT, '0.0.0.0', () => {
       console.log('====================================================');
       console.log(` StudyTree RAG Engine is active at: http://localhost:${PORT}`);
       console.log(` Health check: http://localhost:${PORT}/api/health`);
