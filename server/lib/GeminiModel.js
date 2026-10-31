@@ -1,7 +1,7 @@
 const axios = require('axios');
 
 class GeminiModel {
-  constructor(apiKey = process.env.GEMINI_API_KEY) {
+  constructor(apiKey = (process.env.GEMINI_API_KEY || process.env.GEMINI_API_Key || process.env.gemini_api_key)) {
     this.apiKey = apiKey;
     this.model = process.env.GEMINI_MODEL || 'gemini-3.8-flash';
     this.baseUrl = 'https://generativelanguage.googleapis.com/v1beta';

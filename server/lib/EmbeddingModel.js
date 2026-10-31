@@ -11,7 +11,7 @@ const axios = require('axios');
  */
 class EmbeddingModel {
   constructor() {
-    this.apiKey = process.env.GEMINI_API_KEY || '';
+    this.apiKey = process.env.GEMINI_API_KEY || process.env.GEMINI_API_Key || process.env.gemini_api_key || '';
     this.model = 'gemini-embedding-001';
     this.dimension = 3072;
     this.baseUrl = 'https://generativelanguage.googleapis.com/v1beta';
