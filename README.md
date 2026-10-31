@@ -1,103 +1,134 @@
 # StudyTree 🌳
+### AI-Powered Academic Assistant for Students
 
-**An AI-powered study assistant that turns your own notes and documents into an interactive, context-aware learning companion.**
-
-StudyTree helps students organize their coursework and get instant, accurate answers grounded in their own study material — instead of generic AI responses that don't know what's actually in their syllabus, notes, or textbooks.
+StudyTree is an AI-powered academic assistant that helps students organize their study materials, understand uploaded documents, and prepare for examinations. It uses a Retrieval-Augmented Generation (RAG) pipeline to retrieve relevant information from a student's documents and generate context-aware answers.
 
 ---
 
 ## ✨ Features
 
-- **Study Organization** – Structure and manage subjects, topics, and study material in one place.
-- **Document-Based Learning** – Upload PDFs and study documents directly into the platform.
-- **Retrieval-Augmented Generation (RAG) Pipeline** – Answers are generated using your uploaded documents as context, not just the model's general knowledge, reducing hallucination and keeping responses relevant to your syllabus.
-- **Semantic Search** – Custom vector search over embedded document content to retrieve the most relevant sections before generating an answer.
-- **Local LLM Embeddings** – Uses Ollama running LLaMA 3 to generate embeddings, keeping document processing local and cost-efficient.
-- **AI-Powered Q&A** – Ask questions in natural language and get context-aware answers backed by the Grok API.
+- **Document Upload:** Upload academic PDF documents and study notes.
+- **Document Processing:** Extract text from PDFs and divide it into smaller chunks for retrieval.
+- **AI-Powered Q&A:** Ask questions about uploaded study material in natural language.
+- **RAG Pipeline:** Retrieve relevant document content before generating an answer.
+- **Semantic Search:** Find relevant passages using vector embeddings and cosine similarity.
+- **AI Responses with Gemini:** Use the Google Gemini API to generate answers grounded in retrieved context.
+- **Document Summarization:** Generate summaries of uploaded study material.
+- **Document Library:** View and manage uploaded documents.
+- **Chat History:** Access previous conversations and clear chat history.
+- **Exam-Ready Mode:** Support focused exam preparation.
+- **Pomodoro Timer:** Use timed study sessions.
+- **Task Checklist:** Organize study tasks.
+- **Suggested Prompts and Help:** Get prompt suggestions, status feedback, and quick guidance.
 
 ---
 
-## 🛠️ Tech Stack
+## 🛠️ Technology Stack
 
-**Frontend**
-- React.js
-- Vite
-- React Router
-
-**Backend**
-- Node.js
-- Express.js
-
-**Database**
-- MongoDB with Mongoose (ODM)
-
-**AI / ML**
-- Ollama (LLaMA 3) – local embedding generation
-- Custom vector search implementation
-- Grok API – context-aware answer generation
-- PDF parsing pipeline for document ingestion
+| Component | Technologies |
+|---|---|
+| Frontend | React 19, Vite 7, JavaScript |
+| UI and Styling | HTML5, CSS, Lucide React |
+| Backend | Node.js, Express 5 |
+| Database / Persistence | MongoDB, Mongoose, JSON-based local persistence |
+| File Upload | Multer |
+| PDF Text Extraction | pdf-parse |
+| Embedding Generation | Transformers.js |
+| Embedding Model | Xenova/all-MiniLM-L6-v2 |
+| Vector Search | Custom vector store, cosine similarity |
+| AI Response Generation | Google Gemini API |
 
 ---
 
-## ⚙️ How It Works
+## 🧠 How StudyTree Works
 
-1. **Upload** – A student uploads study documents (PDFs, notes) into StudyTree.
-2. **Parse & Chunk** – Documents are parsed and split into meaningful sections.
-3. **Embed** – Each section is converted into vector embeddings using LLaMA 3 via Ollama.
-4. **Store & Index** – Embeddings are stored and indexed for fast semantic retrieval.
-5. **Query** – When a student asks a question, StudyTree retrieves the most relevant document sections via vector search.
-6. **Generate** – The retrieved context is passed to the Grok API, which generates an accurate, grounded answer.
+1. **Upload:** A student uploads a PDF through the React frontend.
+2. **Receive:** The Express backend receives the uploaded file using Multer.
+3. **Extract:** pdf-parse extracts text from the PDF.
+4. **Chunk:** The extracted text is divided into smaller, overlapping text chunks.
+5. **Embed:** Transformers.js uses Xenova/all-MiniLM-L6-v2 to convert text chunks into numerical embeddings.
+6. **Store:** The generated vectors and document information are stored for retrieval.
+7. **Query:** When a student asks a question, the question is also converted into an embedding.
+8. **Retrieve:** The vector store compares the query embedding with stored embeddings using cosine similarity and retrieves relevant chunks.
+9. **Generate:** The retrieved context is passed to the Google Gemini API to generate a response.
+10. **Display:** The generated answer is returned to the frontend and displayed in the chat interface.
 
----
+### RAG Pipeline
 
-## 🚀 Getting Started
+PDF Upload
+    |
+    v
+Text Extraction (pdf-parse)
+    |
+    v
+Text Chunking
+    |
+    v
+Embedding Generation
+(Transformers.js - all-MiniLM-L6-v2)
+    |
+    v
+Vector Store
+    |
+    v
+Student Question
+    |
+    v
+Query Embedding
+    |
+    v
+Cosine Similarity Search
+    |
+    v
+Relevant Context Retrieval
+    |
+    v
+Google Gemini API
+    |
+    v
+Context-Aware Answer
 
-### Prerequisites
-- Node.js (v18+ recommended)
-- MongoDB instance (local or Atlas)
-- [Ollama](https://ollama.com) installed locally with the LLaMA 3 model pulled
-- A Grok API key
+### Embedding and Retrieval Configuration
 
-### Installation
+- **Embedding model:** Xenova/all-MiniLM-L6-v2
+- **Embedding dimensions:** 384
+- **Approximate chunk size:** 750 characters
+- **Approximate chunk overlap:** 150 characters
+- **Similarity method:** Cosine similarity
+- **Retrieval configuration:** Top 4 chunks, with a similarity threshold of 0.20
 
-```bash
-# Clone the repository
-git clone https://github.com/adarshraj2077/StudyTree.git
-cd StudyTree
-
-# Install frontend dependencies
-npm install
-
-# Install backend dependencies
-cd server
-npm install
-cd ..
-```
-
-### Environment Variables
-
-Create a `.env` file in the `server/` directory with:
-
-```env
-MONGODB_URI=your_mongodb_connection_string
-GROK_API_KEY=your_grok_api_key
-OLLAMA_HOST=http://localhost:11434
-PORT=5000
-```
-
-### Running Locally
-
-```bash
-# Runs both frontend (Vite) and backend (Node/Express) concurrently
-npm run dev
-```
-
-The app will be available at `http://localhost:5173` (frontend) with the API running on `http://localhost:5000`.
-
----
-
-## 📌 Project Status
-
-Actively developed — core RAG pipeline and study-organization features are functional.
+These values describe implementation settings; they are not benchmarked accuracy or performance results.
 
 ---
+
+## 🏗️ Project Structure
+
+```text
+StudyTree/
+├── src/
+│   ├── App.jsx
+│   ├── App.css
+│   └── index.css
+│
+├── server/
+│   ├── index.js
+│   ├── lib/
+│   │   ├── RAGPipeline.js
+│   │   ├── EmbeddingModel.js
+│   │   ├── VectorStore.js
+│   │   ├── GeminiModel.js
+│   │   ├── DocumentStore.js
+│   │   ├── ChatStore.js
+│   │   └── db.js
+│   │
+│   ├── models/
+│   │   ├── Document.js
+│   │   └── ChatMessage.js
+│   │
+│   └── data/
+│
+├── public/
+├── index.html
+├── package.json
+├── vite.config.js
+└── README.md
