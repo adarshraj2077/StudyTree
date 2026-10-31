@@ -1,4 +1,4 @@
-﻿const axios = require('axios');
+const axios = require('axios');
 
 class GeminiModel {
   constructor(apiKey = process.env.GEMINI_API_KEY) {
@@ -17,12 +17,28 @@ class GeminiModel {
   }
 
   /**
-   * Generates a context-grounded response using Google Gemini API.
-   * If API key is not configured or fails, falls back gracefully to
-   * high-precision extractive grounding from retrieved chunks.
-   * 
-   * @param {string} systemPrompt 
-   * @param {string} userQuery 
+   * Cleans raw PDF-extracted text before feeding it to the model.
+   * Removes page markers, null bytes, and other PDF artefacts.
+   * @param {string} text
+   * @returns {string}
+   */
+  _cleanPdfText(text) {
+    return (text || '')
+      // Remove PDF page markers like "-- 3 of 65 --"
+      .replace(/--\s*\d+\s*of\s*\d+\s*--/g, '')
+      // Remove control characters (bell \x07 shown as •, null \x00, etc.)
+      .replace(/[\x00-\x08\x0b-\x0c\x0e-\x1f\x7f]/g, '')
+      // Collapse excessive blank lines
+      .replace(/\n{3,}/g, '\n\n')
+      .trim();
+  }
+
+  /**
+   * Generates a clean, human-readable response using Google Gemini API.
+   * Falls back to the grounded extractive engine on failure.
+   *
+   * @param {string} systemPrompt
+   * @param {string} userQuery
    * @param {Array<{ text: string, metadata: object, score: number }>} retrievedChunks
    * @returns {Promise<string>}
    */
@@ -31,7 +47,7 @@ class GeminiModel {
       try {
         console.log(`[GeminiModel] Dispatching query to Google Gemini API (${this.model})...`);
         const url = `${this.baseUrl}/models/${this.model}:generateContent?key=${this.apiKey}`;
-        
+
         const payload = {
           system_instruction: {
             parts: [{ text: systemPrompt }]
@@ -43,14 +59,14 @@ class GeminiModel {
             }
           ],
           generationConfig: {
-            temperature: 0.2,
-            maxOutputTokens: 1024
+            temperature: 0.3,
+            maxOutputTokens: 1500
           }
         };
 
         const response = await axios.post(url, payload, {
           headers: { 'Content-Type': 'application/json' },
-          timeout: 25000
+          timeout: 28000
         });
 
         const candidateText = response.data?.candidates?.[0]?.content?.parts?.[0]?.text;
@@ -60,33 +76,31 @@ class GeminiModel {
       } catch (err) {
         const errorDetails = err.response?.data?.error?.message || err.response?.data || err.message;
         console.warn(`[GeminiModel] Gemini API request failed: ${JSON.stringify(errorDetails)}. Falling back to context grounding engine.`);
-        return this.synthesizeGroundedAnswer(userQuery, retrievedChunks, `(Live Gemini API notice: ${errorDetails})`);
       }
     }
 
-    // High-precision grounded extractive engine when live API key is not configured
-    return this.synthesizeGroundedAnswer(
-      userQuery,
-      retrievedChunks,
-      '(Generated via StudyTree Grounded Engine. Add GEMINI_API_KEY in server/.env for generative Gemini responses.)'
-    );
+    // High-precision grounded extractive engine when live API key is not configured or fails
+    return this.synthesizeGroundedAnswer(userQuery, retrievedChunks);
   }
 
   /**
    * Generates a concise summary and key takeaways from document text using Gemini.
    */
   async generateSummaryAndKeyPoints(fullText, filename) {
+    const cleanedText = this._cleanPdfText(fullText);
+
     if (this.isConfigured()) {
       try {
-        const prompt = `Analyze this technical document "${filename}" and return a JSON object with:
-"summary": a clear 2-3 sentence overview of the main topic and purpose.
-"keyPoints": an array of exactly 3 to 5 core concepts or key takeaways from the text.
+        const prompt = `You are a study assistant. Analyze the following document titled "${filename}" and return a JSON object.
 
-Only return valid JSON without code fences or preamble:
+"summary": Write 2-3 clear, human-readable sentences explaining what this document covers and its main purpose. Do NOT copy raw text directly — paraphrase cleanly.
+"keyPoints": An array of exactly 3 to 5 key concepts or takeaways, each written as a clean, complete sentence that a student can understand.
+
+Return ONLY valid JSON, no markdown, no code fences:
 {"summary": "...", "keyPoints": ["...", "..."]}
 
-DOCUMENT TEXT EXCERPT:
-${fullText.slice(0, 5000)}`;
+DOCUMENT TEXT (first 5000 chars):
+${cleanedText.slice(0, 5000)}`;
 
         const url = `${this.baseUrl}/models/${this.model}:generateContent?key=${this.apiKey}`;
         const response = await axios.post(url, {
@@ -97,8 +111,7 @@ ${fullText.slice(0, 5000)}`;
           ],
           generationConfig: {
             temperature: 0.1,
-            maxOutputTokens: 600,
-            responseMimeType: 'application/json'
+            maxOutputTokens: 700
           }
         }, {
           headers: { 'Content-Type': 'application/json' },
@@ -117,65 +130,75 @@ ${fullText.slice(0, 5000)}`;
     }
 
     // Extractive summary fallback
-    return this.extractSummaryFromText(fullText, filename);
+    return this.extractSummaryFromText(cleanedText, filename);
   }
 
   /**
    * Deterministic, extractive summarizer from raw text without requiring API credits.
+   * Cleans PDF artefacts before extracting.
    */
   extractSummaryFromText(text, filename) {
-    const sentences = text
+    const cleanedText = this._cleanPdfText(text);
+
+    const sentences = cleanedText
       .replace(/\r?\n/g, ' ')
       .split(/(?<=[.?!])\s+/)
       .map(s => s.trim())
-      .filter(s => s.length > 25 && s.length < 250);
+      // Filter out short/noisy strings and raw PDF dump lines
+      .filter(s =>
+        s.length > 30 &&
+        s.length < 300 &&
+        !/^[\d\s•\-–—]+$/.test(s) &&          // pure numbers/dashes/bullets
+        !/^(page|chapter|\d+\s+of\s+\d+)/i.test(s) // page numbers
+      );
 
     const firstSentences = sentences.slice(0, 3).join(' ');
     const summary = firstSentences || `Overview of ${filename} containing structured study content.`;
 
-    const candidates = sentences.slice(3, 15);
+    const candidates = sentences.slice(3, 20);
     const keyPoints = [];
     for (const sent of candidates) {
       if (keyPoints.length >= 4) break;
-      if (!keyPoints.includes(sent)) {
+      if (!keyPoints.some(k => k.toLowerCase().includes(sent.slice(0, 30).toLowerCase()))) {
         keyPoints.push(sent);
       }
     }
 
     if (keyPoints.length === 0) {
-      keyPoints.push(`Document indexed with vector embeddings for semantic query retrieval.`);
-      keyPoints.push(`Ready for interactive Q&A and knowledge testing in Exam Mode.`);
+      keyPoints.push('Document indexed with vector embeddings for semantic query retrieval.');
+      keyPoints.push('Ready for interactive Q&A and knowledge testing in Exam Mode.');
     }
 
-    return {
-      summary,
-      keyPoints
-    };
+    return { summary, keyPoints };
   }
 
   /**
-   * Context-grounded response synthesizer.
-   * Matches keywords and queries against retrieved chunks to present an accurate answer
-   * without hallucination.
+   * Clean, human-readable extractive grounded answer synthesizer.
+   * Used when Gemini API is unavailable.
    */
-  synthesizeGroundedAnswer(userQuery, retrievedChunks, notice = '') {
+  synthesizeGroundedAnswer(userQuery, retrievedChunks) {
     if (!retrievedChunks || retrievedChunks.length === 0) {
-      return `I could not find information regarding "${userQuery}" in the uploaded document(s). Based strictly on the provided material, this topic is not discussed.`;
+      return `I couldn't find information about "${userQuery}" in the uploaded document(s). This topic may not be covered in your current study material — try rephrasing or uploading a relevant document.`;
     }
 
     const queryWords = userQuery.toLowerCase().replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter(w => w.length > 2);
-    
+
     const matchingSentences = [];
-    const sources = new Set();
+    const sourceSet = new Set();
 
     for (const chunk of retrievedChunks) {
       const source = chunk.metadata?.source || 'Document';
-      sources.add(source);
-      const sentences = chunk.text.split(/(?<=[.?!])\s+/);
-      
+      sourceSet.add(source);
+
+      // Clean the chunk text before extracting sentences from it
+      const cleanedChunkText = this._cleanPdfText(chunk.text);
+      const sentences = cleanedChunkText.split(/(?<=[.?!])\s+/);
+
       for (const sent of sentences) {
         const clean = sent.trim();
-        if (clean.length < 20) continue;
+        // Filter out very short or clearly noisy lines
+        if (clean.length < 25 || /^[\d\s•\-–—]+$/.test(clean)) continue;
+
         const lower = clean.toLowerCase();
         let matchCount = 0;
         for (const word of queryWords) {
@@ -193,16 +216,22 @@ ${fullText.slice(0, 5000)}`;
 
     matchingSentences.sort((a, b) => b.score - a.score);
 
-    let answerBody = '';
-    if (matchingSentences.length > 0) {
-      const topSentences = matchingSentences.slice(0, 4).map(s => `• ${s.text} *[From ${s.source}]*`).join('\n\n');
-      answerBody = `Based on the uploaded document(s), here is the relevant information found:\n\n${topSentences}`;
-    } else {
-      const topChunk = retrievedChunks[0];
-      answerBody = `From **${topChunk.metadata?.source || 'your document'}**:\n\n"${topChunk.text.trim().slice(0, 450)}..."`;
-    }
+    const sources = Array.from(sourceSet);
+    const sourceNote = sources.length > 0 ? `\n\n*Sources: ${sources.join(', ')}*` : '';
 
-    return `${answerBody}\n\n${notice}`.trim();
+    if (matchingSentences.length > 0) {
+      const topSentences = matchingSentences
+        .slice(0, 5)
+        .map(s => `- ${s.text}`)
+        .join('\n');
+
+      return `Here is what your study material says about **"${userQuery}"**:\n\n${topSentences}${sourceNote}`;
+    } else {
+      // Fallback: show a cleaned excerpt from the top chunk
+      const topChunk = retrievedChunks[0];
+      const cleanedExcerpt = this._cleanPdfText(topChunk.text).slice(0, 500);
+      return `Based on your uploaded documents, here's the most relevant section:\n\n${cleanedExcerpt}...${sourceNote}`;
+    }
   }
 }
 

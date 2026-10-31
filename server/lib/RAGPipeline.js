@@ -228,9 +228,16 @@ class RAGPipeline {
     }
 
     // 3. Construct bounded context string
-    const contextContent = relevantChunks.map((c, i) => 
-      `--- [Source: ${c.metadata?.source || 'Document'} | Chunk #${c.metadata?.idx || i + 1} | Relevance Score: ${(c.score * 100).toFixed(1)}%] ---\n${c.text}`
-    ).join('\n\n');
+    // Strip PDF artefacts from each chunk before feeding to the LLM
+    const cleanChunkText = (text) => (text || '')
+      .replace(/--\s*\d+\s*of\s*\d+\s*--/g, '')
+      .replace(/[\x00-\x08\x0b-\x0c\x0e-\x1f\x7f]/g, '')
+      .replace(/\n{3,}/g, '\n\n')
+      .trim();
+
+    const contextContent = relevantChunks.map((c, i) =>
+      `[Source: ${c.metadata?.source || 'Document'} | Relevance: ${(c.score * 100).toFixed(0)}%]\n${cleanChunkText(c.text)}`
+    ).join('\n\n---\n\n');
 
     // 4. Construct grounded system prompt
     let systemPrompt = '';
@@ -247,14 +254,19 @@ Rules:
 ${contextContent}
 === END CONTEXT ===`;
     } else {
-      systemPrompt = `You are StudyTree CS Study Assistant, an expert AI tutor.
-Answer the user's question accurately, concisely, and helpfully based ONLY on the following fetched document context.
-Rules:
-1. Always base your response on the provided context snippets.
-2. Explain concepts clearly using clean paragraphs and bullet points. Mention source document names naturally at the end rather than littering every sentence with chunk tags.
-3. Do not invent or assume facts beyond the context. If the answer is not present, clearly state: "Based on the provided documents, I do not have enough information to answer that."
+      systemPrompt = `You are StudyTree, an expert AI study tutor.
 
-=== VERIFIED DOCUMENT CONTEXT ===
+Your job: Answer the student question in clear, fluent, human-readable English based ONLY on the document context below.
+
+STRICT RULES:
+1. Write naturally like a teacher explaining to a student. No raw data dumps.
+2. Use a brief intro sentence, then organised bullet points for key details.
+3. NEVER copy raw PDF artefacts like page markers ("-- 3 of 65 --"), course codes, dates, or repetitive slide headers.
+4. Paraphrase and explain; do not paste raw extracted text verbatim.
+5. End with exactly one line: "Source: [document name]"
+6. If the context does not contain the answer say: "Based on the provided documents, I don't have enough information to answer that question."
+
+=== DOCUMENT CONTEXT ===
 ${contextContent}
 === END CONTEXT ===`;
     }
